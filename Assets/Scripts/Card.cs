@@ -4,6 +4,8 @@ using UnityEngine;
 
 public class Card : MonoBehaviour
 {
+	public int id;
+	public bool revealed = false;
 	public Tarot.AllCards value;
 	public int token_id; // -1 if loaner
 	public Renderer front, back;

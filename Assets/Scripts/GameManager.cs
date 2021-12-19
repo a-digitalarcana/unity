@@ -17,6 +17,7 @@ using ParrelSync;
 public class CardMapping
 {
 	public int id;
+	public int value;
 	public int token_id;
 	public string ipfsUri;
 }
@@ -31,6 +32,14 @@ public class CardMetadata
 	public string lot;
 }
 
+[Serializable]
+public class DeckEntry
+{
+	public Transform root;
+	public bool stacked = true;
+	public List<GameObject> cards = new List<GameObject>();
+}
+
 public class GameManager : MonoBehaviour
 {
 	public TMP_Text console;
@@ -40,16 +49,10 @@ public class GameManager : MonoBehaviour
 	Camera src;
 
 	public GameObject cardPrefab;
-	public GameObject handRoot;
-	List<GameObject> cards = new List<GameObject>();
 
-	public GameObject deckRoot;
-	public GameObject deckA;
-	public GameObject deckB;
-	Transform playerDeckRoot;
-	Transform otherDeckRoot;
-	List<GameObject> deck = new List<GameObject>();
-	List<GameObject> otherDeck = new List<GameObject>();
+	public List<DeckEntry> decks;
+	DeckEntry playerDeck;
+	Transform handTransform;
 
 	public GameObject purchase, pack;
 	public Color purchaseColor, pendingColor;
@@ -85,6 +88,8 @@ public class GameManager : MonoBehaviour
 
 	LinkedList<string> pendingDownloads = new LinkedList<string>();
 
+	Dictionary<string, bool> textureDownloaded = new Dictionary<string, bool>(); // by metadata.displayUri
+
 	private string IpfsUriToUrl(string uri)
 	{
 		if (!uri.StartsWith("ipfs://"))
@@ -115,6 +120,7 @@ public class GameManager : MonoBehaviour
 	private void Awake()
 	{
 		src = GetComponent<Camera>();
+		handTransform = GetDeck("HandRoot").root;
 	}
 
 	private void Start()
@@ -134,9 +140,20 @@ public class GameManager : MonoBehaviour
 
 		//OnIsPlayerA();
 		SetPlayerTransform(1.0f);
-		playerDeckRoot = deckA.transform;
-		otherDeckRoot = deckB.transform;
+		playerDeck = GetDeck("DeckA");
 		DealLoanerDeck();
+	}
+
+	DeckEntry GetDeck(string name)
+	{
+		foreach (var deck in decks)
+		{
+			if (deck.root.name == name)
+			{
+				return deck;
+			}
+		}
+		return null;
 	}
 
 	void DealLoanerDeck()
@@ -144,11 +161,54 @@ public class GameManager : MonoBehaviour
 		var indices = Deck.shuffledIndices;
 		foreach (var i in indices)
 		{
-			var cardObject = AddCard(playerDeckRoot, deck);
+			var cardObject = AddCard(playerDeck);
 			var card = cardObject.GetComponent<Card>();
 			card.value = (Tarot.AllCards)i;
 			card.token_id = -1;
 			card.front.material.mainTexture = loaner.textures[i];
+			card.back.material.mainTexture = loaner.back;
+		}
+	}
+	void AddToDeck(DeckEntry entry, int[] ids)
+	{
+		foreach (var id in ids)
+		{
+			var cardObject = AddCard(entry);
+			var card = cardObject.GetComponent<Card>();
+			card.id = id;
+
+			// look up mapping
+			if (mappings.ContainsKey(id))
+			{
+				var mapping = mappings[id];
+				card.token_id = mapping.token_id;
+				card.value = (Tarot.AllCards)mapping.value;
+				card.revealed = true;
+
+				// Use loaner deck texture as fallback until downloaded.
+				card.front.material.mainTexture = loaner.textures[mapping.value];
+
+				CardMetadata metadata;
+				if (tokenMetadata.TryGetValue(mapping.token_id, out metadata))
+				{
+					if (textureDownloaded.ContainsKey(metadata.displayUri))
+					{
+						var priority = Card.GetLotPriority(metadata.lot);
+						Davinci.get()
+							.load(metadata.displayUri)
+							.withColor(Card.lotColors[priority])
+							.into(card.front)
+							.start();
+					}
+				}
+			}
+			else
+			{
+				card.token_id = -1;
+				card.front.material.mainTexture = loaner.blank;
+			}
+
+			// TODO: Get back texture from pack (if available)
 			card.back.material.mainTexture = loaner.back;
 		}
 	}
@@ -164,6 +224,7 @@ public class GameManager : MonoBehaviour
 		manager.Socket.On(SocketIOEventTypes.Connect, OnConnected);
 		manager.Socket.On("isPlayerA", OnIsPlayerA);
 		manager.Socket.On("isPlayerB", OnIsPlayerB);
+		manager.Socket.On<string, string>("newDeck", OnNewDeck);
 		manager.Socket.On<string>("msg", OnMsg);
 		manager.Socket.On<CardMapping[]>("revealCards", OnRevealCards);
 		manager.Open();
@@ -183,12 +244,7 @@ public class GameManager : MonoBehaviour
 	public void SetWalletAddress(string address)
 	{
 		OnMsg("Connected wallet: " + address);
-
 		manager.Socket.Emit("setWallet", address);
-
-		//var key = address + ".owned";
-		//manager[key].On("addCards");
-		//manager[key].On("removeCards");
 	}
 
 	void SetPlayerTransform(float scale)
@@ -204,18 +260,74 @@ public class GameManager : MonoBehaviour
 		t.localEulerAngles = rot;
 	}
 
+	void RemoveAllCards()
+	{
+		foreach (var deck in decks)
+		{
+			RemoveAllCards(deck.cards);
+		}
+	}
+
+	void RemoveAllCards(List<GameObject> cards)
+	{
+		foreach (var card in cards)
+		{
+			Destroy(card);
+		}
+		cards.Clear();
+	}
+
+	void RemoveFromDeck(List<GameObject> cards, int[] ids)
+	{
+		foreach (var id in ids)
+		{
+			foreach (var card in cards)
+			{
+				if (card.GetComponent<Card>().id == id)
+				{
+					cards.Remove(card);
+					Destroy(card);
+					break;
+				}
+			}
+		}
+	}
+
+	bool playingOnlineGame = false;
+
 	void OnIsPlayerA()
 	{
+		RemoveAllCards();
+		pendingDownloads.Clear();
+		playingOnlineGame = true;
+
 		//SetPlayerTransform(1.0f);
-		//playerDeckRoot = deckA.transform;
-		//otherDeckRoot = deckB.transform;
+		playerDeck = GetDeck("DeckA");
 	}
 
 	void OnIsPlayerB()
 	{
-		//SetPlayerTransform(-1.0f);
-		//playerDeckRoot = deckB.transform;
-		//otherDeckRoot = deckA.transform;
+		RemoveAllCards();
+		pendingDownloads.Clear();
+		playingOnlineGame = true;
+
+		//SetPlayerTransform(1.0f);
+		playerDeck = GetDeck("DeckB");
+	}
+
+	void OnNewDeck(string name, string key)
+	{
+		Debug.Log("NewDeck: " + name + " " + key);
+
+		var deck = GetDeck(name);
+		if (deck == null)
+		{
+			Debug.LogError("Unknown deck: " + name);
+			return;
+		}
+
+		manager[key].On<int[]>("addCards", (int[] cards) => AddToDeck(deck, cards));
+		manager[key].On<int[]>("removeCards", (int[] cards) => RemoveFromDeck(deck.cards, cards));
 	}
 
 	float beginPurchaseTime = 0.0f;
@@ -291,23 +403,35 @@ public class GameManager : MonoBehaviour
 		if (!card)
 			return;
 
-		if (card.transform.parent == playerDeckRoot)
+		// Handle clicking on player's deck
+		if (playerDeck != null && card.transform.parent == playerDeck.root)
 		{
-			if (cards.Count < 24)
+			if (playingOnlineGame)
 			{
-				var topCard = deck.Last();
-				topCard.transform.parent = handRoot.transform;
-				topCard.transform.localPosition = new Vector3(cards.Count * cardOffset, 0, 0);
+				manager.Socket.Emit("drawCard");
+				return;
+			}
+
+			var hand = GetDeck("HandRoot");
+			if (hand.cards.Count < 24)
+			{
+				var topCard = playerDeck.cards.Last();
+				topCard.transform.parent = hand.root;
+				topCard.transform.localPosition = new Vector3(hand.cards.Count * cardOffset, 0, 0);
 				topCard.transform.localRotation = Quaternion.identity;
-				deck.Remove(topCard);
-				cards.Add(topCard);
+				playerDeck.cards.Remove(topCard);
+				hand.cards.Add(topCard);
 			}
 			return;
 		}
 
-		var pos = card.transform.localPosition;
-		pos.y = (pos.y > 0) ? 0 : cardOffset;
-		card.transform.localPosition = pos;
+		// Handle clicking on card in hand
+		if (card.transform.parent == handTransform)
+		{
+			var pos = card.transform.localPosition;
+			pos.y = (pos.y > 0) ? 0 : cardOffset;
+			card.transform.localPosition = pos;
+		}
 	}
 
 	public void OnBuyCardPack(int success)
@@ -353,18 +477,18 @@ public class GameManager : MonoBehaviour
 		}
 	}
 
-	GameObject AddCard(Transform root, List<GameObject> list)
+	GameObject AddCard(DeckEntry deck)
 	{
-		var newCard = Instantiate(cardPrefab, root);
-		if (root == playerDeckRoot || root == otherDeckRoot)
+		var newCard = Instantiate(cardPrefab, deck.root);
+		if (deck.stacked)
 		{
-			newCard.transform.localPosition = new Vector3(0, 0, list.Count * stackOffset);
+			newCard.transform.localPosition = new Vector3(0, 0, deck.cards.Count * stackOffset);
 		}
 		else
 		{
-			newCard.transform.localPosition = new Vector3(list.Count * cardOffset, 0, 0);
+			newCard.transform.localPosition = new Vector3(deck.cards.Count * cardOffset, 0, 0);
 		}
-		list.Add(newCard);
+		deck.cards.Add(newCard);
 		return newCard;
 	}
 
@@ -396,6 +520,40 @@ public class GameManager : MonoBehaviour
 
 		foreach (var mapping in mappings)
 		{
+			// TODO: Optimize
+			foreach (var deck in decks)
+			{
+				foreach (var cardObj in deck.cards)
+				{
+					var card = cardObj.GetComponent<Card>();
+					if (card.id == mapping.id && !card.revealed)
+					{
+						card.revealed = true;
+						card.value = (Tarot.AllCards)mapping.value;
+						card.token_id = mapping.token_id;
+
+						// Use loaner deck texture as fallback until downloaded.
+						card.front.material.mainTexture = loaner.textures[mapping.value];
+
+						CardMetadata metadata;
+						if (tokenMetadata.TryGetValue(mapping.token_id, out metadata))
+						{
+							if (textureDownloaded.ContainsKey(metadata.displayUri))
+							{
+								var priority = Card.GetLotPriority(metadata.lot);
+								Davinci.get()
+									.load(metadata.displayUri)
+									.withColor(Card.lotColors[priority])
+									.into(card.front)
+									.start();
+							}
+						}
+
+
+					}
+				}
+			}
+
 			mapping.ipfsUri = IpfsUriToUrl(mapping.ipfsUri);
 			this.mappings[mapping.id] = mapping;
 			pendingDownloads.AddLast(mapping.ipfsUri);
@@ -411,7 +569,7 @@ public class GameManager : MonoBehaviour
 	{
 		var deltaTime = 60.0f / pinataRateLimit;
 
-		while (true)
+		while (pendingDownloads.First != null)
 		{
 			var url = pendingDownloads.First.Value;
 			pendingDownloads.RemoveFirst();
@@ -494,8 +652,11 @@ public class GameManager : MonoBehaviour
 	}
 	void OnTextureDownloaded(string url)
 	{
-		UpgradeCards(cards, url);
-		UpgradeCards(deck, url);
+		textureDownloaded[url] = true;
+		foreach (var deck in decks)
+		{
+			UpgradeCards(deck.cards, url);
+		}
 	}
 
 	void UpgradeCards(List<GameObject> cards, string textureUrl)

@@ -25,7 +25,7 @@ public static class IListExtensions
 public class Deck : ScriptableObject
 {
 	public Texture2D[] textures;
-	public Texture2D back;
+	public Texture2D back, blank;
 
 	static int[] _indices = Enumerable.Range(0, Tarot.Utils.TotalCards).ToArray();
 	public static int[] shuffledIndices

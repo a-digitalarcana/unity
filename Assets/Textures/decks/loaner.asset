@@ -92,3 +92,4 @@ MonoBehaviour:
   - {fileID: 2800000, guid: cdda19f3540ae474f9a0c1645368301e, type: 3}
   - {fileID: 2800000, guid: af0957a5abbbd9c4386f134cac2ba1b6, type: 3}
   back: {fileID: 2800000, guid: 0eea753476e184d4194f4fd0256a64a2, type: 3}
+  blank: {fileID: 2800000, guid: f8ce1c4231e7e854293fea0e6ba2ebeb, type: 3}
