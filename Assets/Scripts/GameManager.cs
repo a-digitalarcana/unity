@@ -54,6 +54,8 @@ public class GameManager : MonoBehaviour
 	public GameObject purchase, pack;
 	public Color purchaseColor, pendingColor;
 
+	public GameObject statue;
+
 	public Deck loaner;
 
 	public float cardOffset = 0.03f;
@@ -130,7 +132,10 @@ public class GameManager : MonoBehaviour
 		GetHostAddress(); // ask browser, will call SetHostAddress
 #endif
 
-		OnIsPlayerA();
+		//OnIsPlayerA();
+		SetPlayerTransform(1.0f);
+		playerDeckRoot = deckA.transform;
+		otherDeckRoot = deckB.transform;
 		DealLoanerDeck();
 	}
 
@@ -201,16 +206,16 @@ public class GameManager : MonoBehaviour
 
 	void OnIsPlayerA()
 	{
-		SetPlayerTransform(1.0f);
-		playerDeckRoot = deckA.transform;
-		otherDeckRoot = deckB.transform;
+		//SetPlayerTransform(1.0f);
+		//playerDeckRoot = deckA.transform;
+		//otherDeckRoot = deckB.transform;
 	}
 
 	void OnIsPlayerB()
 	{
-		SetPlayerTransform(-1.0f);
-		playerDeckRoot = deckB.transform;
-		otherDeckRoot = deckA.transform;
+		//SetPlayerTransform(-1.0f);
+		//playerDeckRoot = deckB.transform;
+		//otherDeckRoot = deckA.transform;
 	}
 
 	float beginPurchaseTime = 0.0f;
@@ -270,6 +275,15 @@ public class GameManager : MonoBehaviour
 		#elif (UNITY_WEBGL)
 			OpenCardPack(); // ask browser, will call OnOpenCardPack
 		#endif
+			return;
+		}
+
+		// Handle clicking on statue
+		if (hit.collider.gameObject == statue)
+		{
+			OnMsg("Play War Online");
+			hit.collider.enabled = false;
+			manager.Socket.Emit("playOnline", "War");
 			return;
 		}
 

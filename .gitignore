@@ -4,6 +4,8 @@
 [Bb]uild/
 [Bb]uilds/
 Assets/AssetStoreTools*
+Assets/Thirdparty.meta
+Assets/Thirdparty/*
 
 # Visual Studio cache directory
 .vs/
@@ -36,14 +38,5 @@ sysinfo.txt
 *.apk
 *.unitypackage
 *.log
-Assets/Best HTTP.meta
-Assets/Best HTTP/*
-Assets/Davinci.meta
-Assets/Davinci/*
-Assets/ExampleAssets.meta
-Assets/ExampleAssets/*
-Assets/TextMesh Pro.meta
-Assets/TextMesh Pro/*
-Assets/TutorialInfo.meta
-Assets/TutorialInfo/*
+
 buildClient.cmd
