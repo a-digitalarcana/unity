@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Linq;
 using UnityEngine;
-using UnityEngine.Networking;
 using TMPro;
 using BestHTTP;
 using BestHTTP.SocketIO3;
@@ -51,6 +50,8 @@ public class GameManager : MonoBehaviour
 	Transform otherDeckRoot;
 	List<GameObject> deck = new List<GameObject>();
 	List<GameObject> otherDeck = new List<GameObject>();
+
+	public GameObject purchase, pack;
 
 	public Deck loaner;
 
@@ -98,6 +99,15 @@ public class GameManager : MonoBehaviour
 
 	[DllImport("__Internal")]
 	private static extern void GetWalletAddress();
+
+	[DllImport("__Internal")]
+	private static extern void BuyCardPack();
+
+	[DllImport("__Internal")]
+	private static extern void RefundCardPack();
+
+	[DllImport("__Internal")]
+	private static extern void OpenCardPack();
 
 	private void Awake()
 	{
@@ -202,6 +212,8 @@ public class GameManager : MonoBehaviour
 		otherDeckRoot = deckA.transform;
 	}
 
+	float beginPurchaseTime = 0.0f;
+
 	void Update()
 	{
 		if (!Input.GetMouseButtonDown(0))
@@ -212,6 +224,32 @@ public class GameManager : MonoBehaviour
 		RaycastHit hit;
 		if (!Physics.Raycast(ray, out hit))
 			return;
+
+		// Handle clicking on purchase tray
+		if (hit.collider.gameObject == purchase && !pack.activeSelf)
+		{
+			if (beginPurchaseTime > 0.0f && Time.realtimeSinceStartup < beginPurchaseTime + 20.0f)
+			{
+				Debug.Log("Throttling purchase");
+				return;
+			}
+			beginPurchaseTime = Time.realtimeSinceStartup;
+			Debug.Log("Initiating purchase");
+#if (UNITY_WEBGL && !UNITY_EDITOR)
+			BuyCardPack(); // ask browser, will call OnBuyCardPack
+#endif
+			return;
+		}
+
+		// Handle clicking on unopened pack
+		if (hit.collider.gameObject == pack)
+		{
+			pack.SetActive(false);
+#if (UNITY_WEBGL && !UNITY_EDITOR)
+			OpenCardPack(); // ask browser, will call OnOpenCardPack
+#endif
+			return;
+		}
 
 		var card = hit.collider.GetComponentInParent<Card>();
 		if (!card)
@@ -236,7 +274,22 @@ public class GameManager : MonoBehaviour
 		card.transform.localPosition = pos;
 	}
 
-	void OnMsg(string msg)
+	public void OnBuyCardPack(int success)
+	{
+		Debug.Log("OnBuyCardPack: " + success);
+		beginPurchaseTime = 0.0f;
+		if (success != 0)
+		{
+			pack.SetActive(true);
+		}
+	}
+
+	public void OnRefundCardPack(int success)
+	{
+		Debug.Log("OnRefundCardPack: " + success);
+	}
+
+	public void OnMsg(string msg)
 	{
 		Debug.Log(msg);
 		console.text += '\n' + msg;
@@ -329,7 +382,7 @@ public class GameManager : MonoBehaviour
 
 				var request = new HTTPRequest(new Uri(url), OnCardInfo);
 				request.Send();
-				Debug.Log("Fetching: " + url);
+				//Debug.Log("Fetching: " + url);
 			}
 			else
 			{
@@ -344,14 +397,14 @@ public class GameManager : MonoBehaviour
 					else continue;
 				}
 
-				Debug.Log("Fetching: " + url);
+				//Debug.Log("Fetching: " + url);
 			}
 
 			if (done) break;
 			else yield return new WaitForSecondsRealtime(deltaTime);
 		}
 
-		Debug.Log("Done!");
+		//Debug.Log("Done!");
 	}
 
 	void OnCardInfo(HTTPRequest request, HTTPResponse response)
@@ -425,7 +478,7 @@ public class GameManager : MonoBehaviour
 				if (priority <= Card.GetLotPriority(lot))
 					continue;
 
-				Debug.Log("Upgrading " + card.value + "(" + card.token_id + ") to " + metadata.lot + "(" + mapping.token_id + ")");
+				//Debug.Log("Upgrading " + card.value + "(" + card.token_id + ") to " + metadata.lot + "(" + mapping.token_id + ")");
 				card.token_id = mapping.token_id;
 				Davinci.get()
 					.load(textureUrl)
