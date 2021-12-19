@@ -1548,6 +1548,8 @@ MonoBehaviour:
   deckB: {fileID: 1929556648}
   purchase: {fileID: 971905298}
   pack: {fileID: 1061194685}
+  purchaseColor: {r: 0.085751146, g: 0.4433962, b: 0.17446935, a: 0}
+  pendingColor: {r: 0.2924528, g: 0.048282295, b: 0.048282295, a: 0}
   loaner: {fileID: 11400000, guid: e322c5530c94c174387ebaa85e399fd9, type: 2}
   cardOffset: 0.03
   stackOffset: 0.000254

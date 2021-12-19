@@ -52,6 +52,7 @@ public class GameManager : MonoBehaviour
 	List<GameObject> otherDeck = new List<GameObject>();
 
 	public GameObject purchase, pack;
+	public Color purchaseColor, pendingColor;
 
 	public Deck loaner;
 
@@ -213,9 +214,18 @@ public class GameManager : MonoBehaviour
 	}
 
 	float beginPurchaseTime = 0.0f;
+	float pendingOpenTime = 0.0f;
 
 	void Update()
 	{
+		// Handle pack open server timeout
+		if (pendingOpenTime > 0.0f && Time.realtimeSinceStartup > pendingOpenTime + 60.0f)
+		{
+			OnMsg("Server timed out, resetting pack state.");
+			pack.GetComponent<Renderer>().material.color = purchaseColor;
+			pendingOpenTime = 0.0f;
+		}
+
 		if (!Input.GetMouseButtonDown(0))
 			return;
 
@@ -228,26 +238,38 @@ public class GameManager : MonoBehaviour
 		// Handle clicking on purchase tray
 		if (hit.collider.gameObject == purchase && !pack.activeSelf)
 		{
-			if (beginPurchaseTime > 0.0f && Time.realtimeSinceStartup < beginPurchaseTime + 20.0f)
+			if (beginPurchaseTime > 0.0f && Time.realtimeSinceStartup < beginPurchaseTime + 60.0f)
 			{
 				Debug.Log("Throttling purchase");
 				return;
 			}
 			beginPurchaseTime = Time.realtimeSinceStartup;
-			Debug.Log("Initiating purchase");
-#if (UNITY_WEBGL && !UNITY_EDITOR)
+			OnMsg("Initiating purchase...");
+		#if (UNITY_EDITOR)
+			OnBuyCardPack(1);
+		#elif (UNITY_WEBGL)
 			BuyCardPack(); // ask browser, will call OnBuyCardPack
-#endif
+		#endif
 			return;
 		}
 
 		// Handle clicking on unopened pack
 		if (hit.collider.gameObject == pack)
 		{
-			pack.SetActive(false);
-#if (UNITY_WEBGL && !UNITY_EDITOR)
+			var material = pack.GetComponent<Renderer>().material;
+			if (material.color == pendingColor)
+			{
+				Debug.Log("Throttling open");
+				return;
+			}
+			pendingOpenTime = Time.realtimeSinceStartup;
+			pack.GetComponent<Renderer>().material.color = pendingColor;
+			OnMsg("Opening pack...");
+		#if (UNITY_EDITOR)
+			OnOpenCardPack(1);
+		#elif (UNITY_WEBGL)
 			OpenCardPack(); // ask browser, will call OnOpenCardPack
-#endif
+		#endif
 			return;
 		}
 
@@ -276,17 +298,27 @@ public class GameManager : MonoBehaviour
 
 	public void OnBuyCardPack(int success)
 	{
-		Debug.Log("OnBuyCardPack: " + success);
+		OnMsg("OnBuyCardPack: " + success);
 		beginPurchaseTime = 0.0f;
 		if (success != 0)
 		{
+			pack.GetComponent<Renderer>().material.color = purchaseColor;
 			pack.SetActive(true);
 		}
 	}
 
 	public void OnRefundCardPack(int success)
 	{
-		Debug.Log("OnRefundCardPack: " + success);
+		OnMsg("OnRefundCardPack: " + success);
+	}
+
+	public void OnOpenCardPack(int success)
+	{
+		OnMsg("OnOpenCardPack: " + success);
+		pack.SetActive(false);
+
+		OnMsg("<Insert cool reveal here>");
+		OnMsg("(For now you will have to refresh the page to download your new cards.)");
 	}
 
 	public void OnMsg(string msg)
