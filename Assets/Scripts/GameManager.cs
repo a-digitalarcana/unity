@@ -94,31 +94,30 @@ public class GameManager : MonoBehaviour
 	}
 
 	[DllImport("__Internal")]
-	private static extern void ConnectWallet();
+	private static extern void GetHostAddress();
+
+	[DllImport("__Internal")]
+	private static extern void GetWalletAddress();
 
 	private void Awake()
 	{
-		//Davinci.ClearAllCachedFiles();
-
 		src = GetComponent<Camera>();
+	}
+
+	private void Start()
+	{
+		//Davinci.ClearAllCachedFiles();
 
 		if (localhost)
 		{
 			serverUrl = "http://localhost:8080";
 		}
 
-		Debug.Log("Connecting to " + serverUrl);
-
-		SocketOptions options = new SocketOptions();
-		options.AutoConnect = false;
-
-		manager = new SocketManager(new Uri(serverUrl), options);
-		manager.Socket.On(SocketIOEventTypes.Connect, OnConnected);
-		manager.Socket.On("isPlayerA", OnIsPlayerA);
-		manager.Socket.On("isPlayerB", OnIsPlayerB);
-		manager.Socket.On<string>("msg", OnMsg);
-		manager.Socket.On<CardMapping[]>("revealCards", OnRevealCards);
-		manager.Open();
+#if (UNITY_EDITOR)
+		SetHostAddress(serverUrl);
+#elif (UNITY_WEBGL)
+		GetHostAddress(); // ask browser, will call SetHostAddress
+#endif
 
 		OnIsPlayerA();
 		DealLoanerDeck();
@@ -138,6 +137,22 @@ public class GameManager : MonoBehaviour
 		}
 	}
 
+	public void SetHostAddress(string address)
+	{
+		Debug.Log("Connecting to " + address);
+
+		SocketOptions options = new SocketOptions();
+		options.AutoConnect = false;
+
+		manager = new SocketManager(new Uri(address), options);
+		manager.Socket.On(SocketIOEventTypes.Connect, OnConnected);
+		manager.Socket.On("isPlayerA", OnIsPlayerA);
+		manager.Socket.On("isPlayerB", OnIsPlayerB);
+		manager.Socket.On<string>("msg", OnMsg);
+		manager.Socket.On<CardMapping[]>("revealCards", OnRevealCards);
+		manager.Open();
+	}
+
 	void OnConnected()
 	{
 		Debug.Log("Connected to server!");
@@ -145,7 +160,7 @@ public class GameManager : MonoBehaviour
 	#if (UNITY_EDITOR)
 		SetWalletAddress((ClonesManager.GetArgument() == "client") ? secondaryAccount : primaryAccount);
 	#elif (UNITY_WEBGL)
-		ConnectWallet(); // ask browser, will call SetWalletAddress
+		GetWalletAddress(); // ask browser, will call SetWalletAddress
 	#endif
 	}
 

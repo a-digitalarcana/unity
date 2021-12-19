@@ -1,6 +1,5 @@
 
 mergeInto(LibraryManager.library, {
-    ConnectWallet: function () {
-        ReactUnityWebGL.ConnectWallet();
-    },
+    GetHostAddress: function () { ReactUnityWebGL.GetHostAddress(); },
+    GetWalletAddress: function () { ReactUnityWebGL.GetWalletAddress(); },
 });
