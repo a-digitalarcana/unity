@@ -418,15 +418,18 @@ public class GameManager : MonoBehaviour
 				if (metadata.displayUri != textureUrl)
 					continue;
 
+				var priority = Card.GetLotPriority(metadata.lot);
+
 				Debug.Assert(card.token_id < 0 || tokenMetadata.ContainsKey(card.token_id));
 				var lot = (card.token_id < 0) ? "" : tokenMetadata[card.token_id].lot;
-				if (Card.GetLotPriority(metadata.lot) <= Card.GetLotPriority(lot))
+				if (priority <= Card.GetLotPriority(lot))
 					continue;
 
 				Debug.Log("Upgrading " + card.value + "(" + card.token_id + ") to " + metadata.lot + "(" + mapping.token_id + ")");
 				card.token_id = mapping.token_id;
 				Davinci.get()
 					.load(textureUrl)
+					.withColor(Card.lotColors[priority])
 					.into(card.front)
 					.start();
 			}
