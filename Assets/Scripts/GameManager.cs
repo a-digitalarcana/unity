@@ -33,10 +33,18 @@ public class CardMetadata
 }
 
 [Serializable]
+public enum DeckMode
+{
+	Stacked,
+	LinearFanRight,
+	LinearFanLeft
+}
+
+[Serializable]
 public class DeckEntry
 {
-	public Transform root;
-	public bool stacked = true;
+	public Transform root, playerSpot;
+	public DeckMode mode;
 	public List<GameObject> cards = new List<GameObject>();
 }
 
@@ -138,9 +146,7 @@ public class GameManager : MonoBehaviour
 		GetHostAddress(); // ask browser, will call SetHostAddress
 #endif
 
-		//OnIsPlayerA();
-		SetPlayerTransform(1.0f);
-		playerDeck = GetDeck("DeckA");
+		OnSetDrawPile("DeckA");
 		DealLoanerDeck();
 	}
 
@@ -222,8 +228,8 @@ public class GameManager : MonoBehaviour
 
 		manager = new SocketManager(new Uri(address), options);
 		manager.Socket.On(SocketIOEventTypes.Connect, OnConnected);
-		manager.Socket.On("isPlayerA", OnIsPlayerA);
-		manager.Socket.On("isPlayerB", OnIsPlayerB);
+		manager.Socket.On<string>("beginGame", OnBeginGame);
+		manager.Socket.On<string>("setDrawPile", OnSetDrawPile);
 		manager.Socket.On<string, string>("newDeck", OnNewDeck);
 		manager.Socket.On<string>("msg", OnMsg);
 		manager.Socket.On<CardMapping[]>("revealCards", OnRevealCards);
@@ -245,19 +251,6 @@ public class GameManager : MonoBehaviour
 	{
 		OnMsg("Connected wallet: " + address);
 		manager.Socket.Emit("setWallet", address);
-	}
-
-	void SetPlayerTransform(float scale)
-	{
-		var t = transform.parent;
-		var pos = t.localPosition;
-		var temp = pos.x;
-		pos.x = pos.z * scale;
-		pos.z = temp;
-		t.localPosition = pos;
-		var rot = t.localEulerAngles;
-		rot.y += 90 * scale;
-		t.localEulerAngles = rot;
 	}
 
 	void RemoveAllCards()
@@ -295,24 +288,27 @@ public class GameManager : MonoBehaviour
 
 	bool playingOnlineGame = false;
 
-	void OnIsPlayerA()
+	void OnBeginGame(string name)
 	{
 		RemoveAllCards();
 		pendingDownloads.Clear();
 		playingOnlineGame = true;
-
-		//SetPlayerTransform(1.0f);
-		playerDeck = GetDeck("DeckA");
 	}
 
-	void OnIsPlayerB()
+	void OnSetDrawPile(string name)
 	{
-		RemoveAllCards();
-		pendingDownloads.Clear();
-		playingOnlineGame = true;
+		playerDeck = GetDeck(name);
+		if (playerDeck == null)
+		{
+			Debug.LogError("Cound not find draw pile: " + name);
+			return;
+		}
 
-		//SetPlayerTransform(1.0f);
-		playerDeck = GetDeck("DeckB");
+		if (playerDeck.playerSpot != null)
+		{
+			var root = transform.parent;
+			root.SetParent(playerDeck.playerSpot, false);
+		}
 	}
 
 	void OnNewDeck(string name, string key)
@@ -480,13 +476,17 @@ public class GameManager : MonoBehaviour
 	GameObject AddCard(DeckEntry deck)
 	{
 		var newCard = Instantiate(cardPrefab, deck.root);
-		if (deck.stacked)
+		switch (deck.mode)
 		{
-			newCard.transform.localPosition = new Vector3(0, 0, deck.cards.Count * stackOffset);
-		}
-		else
-		{
-			newCard.transform.localPosition = new Vector3(deck.cards.Count * cardOffset, 0, 0);
+			case DeckMode.Stacked:
+				newCard.transform.localPosition = new Vector3(0, 0, deck.cards.Count * stackOffset);
+				break;
+			case DeckMode.LinearFanRight:
+				newCard.transform.localPosition = new Vector3(deck.cards.Count * cardOffset, 0, 0);
+				break;
+			case DeckMode.LinearFanLeft:
+				newCard.transform.localPosition = new Vector3(deck.cards.Count * -cardOffset, 0, 0);
+				break;
 		}
 		deck.cards.Add(newCard);
 		return newCard;
