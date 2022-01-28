@@ -1795,7 +1795,7 @@ MonoBehaviour:
   decks:
   - root: {fileID: 859323912}
     playerSpot: {fileID: 0}
-    mode: 0
+    mode: 1
     cards: []
   - root: {fileID: 1302142049}
     playerSpot: {fileID: 621891374}

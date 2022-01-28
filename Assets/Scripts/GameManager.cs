@@ -37,7 +37,7 @@ public enum DeckMode
 {
 	Stacked,
 	LinearFanRight,
-	LinearFanLeft
+	LinearFanLeft // TODO: Cards should rotate opposite direction so newer cards lay on top of older
 }
 
 [Serializable]
@@ -145,9 +145,6 @@ public class GameManager : MonoBehaviour
 #elif (UNITY_WEBGL)
 		GetHostAddress(); // ask browser, will call SetHostAddress
 #endif
-
-		OnSetDrawPile("DeckA");
-		DealLoanerDeck();
 	}
 
 	DeckEntry GetDeck(string name)
@@ -162,19 +159,6 @@ public class GameManager : MonoBehaviour
 		return null;
 	}
 
-	void DealLoanerDeck()
-	{
-		var indices = Deck.shuffledIndices;
-		foreach (var i in indices)
-		{
-			var cardObject = AddCard(playerDeck);
-			var card = cardObject.GetComponent<Card>();
-			card.value = (Tarot.AllCards)i;
-			card.token_id = -1;
-			card.front.material.mainTexture = loaner.textures[i];
-			card.back.material.mainTexture = loaner.back;
-		}
-	}
 	void AddToDeck(DeckEntry entry, int[] ids)
 	{
 		foreach (var id in ids)
@@ -286,13 +270,10 @@ public class GameManager : MonoBehaviour
 		}
 	}
 
-	bool playingOnlineGame = false;
-
 	void OnBeginGame(string name)
 	{
+		Debug.Log("Begin game: " + name);
 		RemoveAllCards();
-		pendingDownloads.Clear();
-		playingOnlineGame = true;
 	}
 
 	void OnSetDrawPile(string name)
@@ -303,6 +284,8 @@ public class GameManager : MonoBehaviour
 			Debug.LogError("Cound not find draw pile: " + name);
 			return;
 		}
+
+		Debug.Log("Draw pile: " + name);
 
 		if (playerDeck.playerSpot != null)
 		{
@@ -402,22 +385,7 @@ public class GameManager : MonoBehaviour
 		// Handle clicking on player's deck
 		if (playerDeck != null && card.transform.parent == playerDeck.root)
 		{
-			if (playingOnlineGame)
-			{
-				manager.Socket.Emit("drawCard");
-				return;
-			}
-
-			var hand = GetDeck("HandRoot");
-			if (hand.cards.Count < 24)
-			{
-				var topCard = playerDeck.cards.Last();
-				topCard.transform.parent = hand.root;
-				topCard.transform.localPosition = new Vector3(hand.cards.Count * cardOffset, 0, 0);
-				topCard.transform.localRotation = Quaternion.identity;
-				playerDeck.cards.Remove(topCard);
-				hand.cards.Add(topCard);
-			}
+			manager.Socket.Emit("drawCard");
 			return;
 		}
 
@@ -548,18 +516,20 @@ public class GameManager : MonoBehaviour
 									.start();
 							}
 						}
-
-
 					}
 				}
 			}
 
-			mapping.ipfsUri = IpfsUriToUrl(mapping.ipfsUri);
 			this.mappings[mapping.id] = mapping;
-			pendingDownloads.AddLast(mapping.ipfsUri);
+
+			if (mapping.ipfsUri != "")
+			{
+				mapping.ipfsUri = IpfsUriToUrl(mapping.ipfsUri);
+				pendingDownloads.AddLast(mapping.ipfsUri);
+			}
 		}
 
-		if (!isFetching)
+		if (!isFetching && pendingDownloads.First != null)
 		{
 			StartCoroutine(FetchCardInfo());
 		}
@@ -647,7 +617,12 @@ public class GameManager : MonoBehaviour
 
 			// Download artifact texture
 			metadata.displayUri = IpfsUriToUrl(metadata.displayUri);
+			bool isFetching = pendingDownloads.First != null;
 			pendingDownloads.AddFirst(metadata.displayUri);
+			if (!isFetching)
+			{
+				StartCoroutine(FetchCardInfo());
+			}
 		}
 	}
 	void OnTextureDownloaded(string url)
@@ -679,14 +654,17 @@ public class GameManager : MonoBehaviour
 					continue;
 
 				var priority = Card.GetLotPriority(metadata.lot);
+				if (card.token_id != mapping.token_id)
+				{
+					Debug.Assert(card.token_id < 0 || tokenMetadata.ContainsKey(card.token_id));
+					var lot = (card.token_id < 0) ? "" : tokenMetadata[card.token_id].lot;
+					if (priority <= Card.GetLotPriority(lot))
+						continue;
 
-				Debug.Assert(card.token_id < 0 || tokenMetadata.ContainsKey(card.token_id));
-				var lot = (card.token_id < 0) ? "" : tokenMetadata[card.token_id].lot;
-				if (priority <= Card.GetLotPriority(lot))
-					continue;
+					Debug.Log("Upgrading " + card.value + "(" + card.token_id + ") to " + metadata.lot + "(" + mapping.token_id + ")");
+					card.token_id = mapping.token_id;
+				}
 
-				//Debug.Log("Upgrading " + card.value + "(" + card.token_id + ") to " + metadata.lot + "(" + mapping.token_id + ")");
-				card.token_id = mapping.token_id;
 				Davinci.get()
 					.load(textureUrl)
 					.withColor(Card.lotColors[priority])
