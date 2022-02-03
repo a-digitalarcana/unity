@@ -163,6 +163,7 @@ public class GameManager : MonoBehaviour
 	{
 		foreach (var id in ids)
 		{
+			// TODO: Verify not already in deck. (Not currently in any deck?)
 			var cardObject = AddCard(entry);
 			var card = cardObject.GetComponent<Card>();
 			card.id = id;
@@ -216,6 +217,7 @@ public class GameManager : MonoBehaviour
 		manager.Socket.On<string>("setDrawPile", OnSetDrawPile);
 		manager.Socket.On<string, string>("newDeck", OnNewDeck);
 		manager.Socket.On<string>("msg", OnMsg);
+		manager.Socket.On<string, int[]>("setCards", OnSetCards);
 		manager.Socket.On<CardMapping[]>("revealCards", OnRevealCards);
 		manager.Open();
 	}
@@ -307,6 +309,20 @@ public class GameManager : MonoBehaviour
 
 		manager[key].On<int[]>("addCards", (int[] cards) => AddToDeck(deck, cards));
 		manager[key].On<int[]>("removeCards", (int[] cards) => RemoveFromDeck(deck.cards, cards));
+
+		manager.Socket.Emit("getCards", name);
+	}
+
+	void OnSetCards(string name, int[] cards)
+	{
+		var deck = GetDeck(name);
+		if (deck == null)
+		{
+			Debug.LogError("Unknown deck: " + name);
+			return;
+		}
+
+		AddToDeck(deck, cards);
 	}
 
 	float beginPurchaseTime = 0.0f;
