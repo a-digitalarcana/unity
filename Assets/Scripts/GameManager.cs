@@ -159,12 +159,23 @@ public class GameManager : MonoBehaviour
 		return null;
 	}
 
+	DeckEntry GetDeckFromKey(string key)
+	{
+		var name = key.Split(':').Last();
+		var deck = GetDeck(name);
+		if (deck == null)
+		{
+			Debug.LogError("Unknown deck: " + name);
+		}
+		return deck;
+	}
+
 	void AddToDeck(DeckEntry entry, int[] ids)
 	{
 		foreach (var id in ids)
 		{
 			// TODO: Verify not already in deck. (Not currently in any deck?)
-			var cardObject = AddCard(entry);
+			var cardObject = NewCard(entry);
 			var card = cardObject.GetComponent<Card>();
 			card.id = id;
 
@@ -204,6 +215,26 @@ public class GameManager : MonoBehaviour
 		}
 	}
 
+	Card TakeCard(int id)
+	{
+		// TODO: Keep mapping of card ids to objects for faster lookup.
+		foreach (var deck in decks)
+		{
+			foreach(var cardObject in deck.cards)
+			{
+				var card = cardObject.GetComponent<Card>();
+				if (card.id == id)
+				{
+					deck.cards.Remove(cardObject);
+					return card;
+				}
+			}
+		}
+
+		Debug.LogError("Failed to find card " + id);
+		return null;
+	}
+
 	public void SetHostAddress(string address)
 	{
 		Debug.Log("Connecting to " + address);
@@ -213,12 +244,13 @@ public class GameManager : MonoBehaviour
 
 		manager = new SocketManager(new Uri(address), options);
 		manager.Socket.On(SocketIOEventTypes.Connect, OnConnected);
-		manager.Socket.On<string>("beginGame", OnBeginGame);
+		manager.Socket.On<string>("setTable", OnSetTable);
 		manager.Socket.On<string>("setDrawPile", OnSetDrawPile);
-		manager.Socket.On<string, string>("newDeck", OnNewDeck);
-		manager.Socket.On<string>("msg", OnMsg);
-		manager.Socket.On<string, int[]>("setCards", OnSetCards);
+		manager.Socket.On<string, int[]>("initDeck", OnInitDeck);
+		manager.Socket.On<string, int[]>("addCards", OnAddCards);
+		manager.Socket.On<string, int[]>("moveCards", OnMoveCards);
 		manager.Socket.On<CardMapping[]>("revealCards", OnRevealCards);
+		manager.Socket.On<string>("msg", OnMsg);
 		manager.Open();
 	}
 
@@ -256,25 +288,8 @@ public class GameManager : MonoBehaviour
 		cards.Clear();
 	}
 
-	void RemoveFromDeck(List<GameObject> cards, int[] ids)
+	void OnSetTable(string tableId)
 	{
-		foreach (var id in ids)
-		{
-			foreach (var card in cards)
-			{
-				if (card.GetComponent<Card>().id == id)
-				{
-					cards.Remove(card);
-					Destroy(card);
-					break;
-				}
-			}
-		}
-	}
-
-	void OnBeginGame(string name)
-	{
-		Debug.Log("Begin game: " + name);
 		RemoveAllCards();
 	}
 
@@ -296,33 +311,42 @@ public class GameManager : MonoBehaviour
 		}
 	}
 
-	void OnNewDeck(string name, string key)
+	void OnInitDeck(string key, int[] cards)
 	{
-		Debug.Log("NewDeck: " + name + " " + key);
+		Debug.Log("InitDeck: " + key);
 
-		var deck = GetDeck(name);
-		if (deck == null)
+		var deck = GetDeckFromKey(key);
+		if (deck != null)
 		{
-			Debug.LogError("Unknown deck: " + name);
-			return;
+			RemoveAllCards(deck.cards);
+			AddToDeck(deck, cards);
 		}
-
-		manager[key].On<int[]>("addCards", (int[] cards) => AddToDeck(deck, cards));
-		manager[key].On<int[]>("removeCards", (int[] cards) => RemoveFromDeck(deck.cards, cards));
-
-		manager.Socket.Emit("getCards", name);
 	}
 
-	void OnSetCards(string name, int[] cards)
+	void OnAddCards(string key, int[] cards)
 	{
-		var deck = GetDeck(name);
-		if (deck == null)
+		var deck = GetDeckFromKey(key);
+		if (deck != null)
 		{
-			Debug.LogError("Unknown deck: " + name);
-			return;
+			AddToDeck(deck, cards);
 		}
+	}
 
-		AddToDeck(deck, cards);
+	void OnMoveCards(string key, int[] cards)
+	{
+		var deck = GetDeckFromKey(key);
+		if (deck != null)
+		{
+			foreach (var id in cards)
+			{
+				var card = TakeCard(id);
+				if (card)
+				{
+					card.transform.SetParent(deck.root, false);
+					AddToDeck(deck, card.gameObject);
+				}
+			}
+		}
 	}
 
 	float beginPurchaseTime = 0.0f;
@@ -457,22 +481,27 @@ public class GameManager : MonoBehaviour
 		}
 	}
 
-	GameObject AddCard(DeckEntry deck)
+	void AddToDeck(DeckEntry deck, GameObject card)
 	{
-		var newCard = Instantiate(cardPrefab, deck.root);
 		switch (deck.mode)
 		{
 			case DeckMode.Stacked:
-				newCard.transform.localPosition = new Vector3(0, 0, deck.cards.Count * stackOffset);
+				card.transform.localPosition = new Vector3(0, 0, deck.cards.Count * stackOffset);
 				break;
 			case DeckMode.LinearFanRight:
-				newCard.transform.localPosition = new Vector3(deck.cards.Count * cardOffset, 0, 0);
+				card.transform.localPosition = new Vector3(deck.cards.Count * cardOffset, 0, 0);
 				break;
 			case DeckMode.LinearFanLeft:
-				newCard.transform.localPosition = new Vector3(deck.cards.Count * -cardOffset, 0, 0);
+				card.transform.localPosition = new Vector3(deck.cards.Count * -cardOffset, 0, 0);
 				break;
 		}
-		deck.cards.Add(newCard);
+		deck.cards.Add(card);
+	}
+
+	GameObject NewCard(DeckEntry deck)
+	{
+		var newCard = Instantiate(cardPrefab, deck.root);
+		AddToDeck(deck, newCard);
 		return newCard;
 	}
 
