@@ -251,6 +251,7 @@ public class GameManager : MonoBehaviour
 		manager.Socket.On<string, int[]>("moveCards", OnMoveCards);
 		manager.Socket.On<CardMapping[]>("revealCards", OnRevealCards);
 		manager.Socket.On<string>("msg", OnMsg);
+		manager.Socket.On<string>("userName", OnUserName);
 		manager.Open();
 	}
 
@@ -503,6 +504,11 @@ public class GameManager : MonoBehaviour
 		var newCard = Instantiate(cardPrefab, deck.root);
 		AddToDeck(deck, newCard);
 		return newCard;
+	}
+
+	void OnUserName(string name)
+	{
+		userName = name;
 	}
 
 	public void OnEnterText(string text)
