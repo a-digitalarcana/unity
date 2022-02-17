@@ -48,6 +48,15 @@ public class DeckEntry
 	public List<GameObject> cards = new List<GameObject>();
 }
 
+[Serializable]
+public class GameEntry
+{
+	public Transform root;
+	public GameObject totem;
+	public Vector3 origin;
+	public Quaternion orientation;
+}
+
 public class GameManager : MonoBehaviour
 {
 	public TMP_Text console;
@@ -58,14 +67,13 @@ public class GameManager : MonoBehaviour
 
 	public GameObject cardPrefab;
 
+	public List<GameEntry> games;
 	public List<DeckEntry> decks;
 	DeckEntry playerDeck;
 	Transform handTransform;
 
 	public GameObject purchase, pack;
 	public Color purchaseColor, pendingColor;
-
-	public GameObject statue;
 
 	public Deck loaner;
 
@@ -246,6 +254,7 @@ public class GameManager : MonoBehaviour
 		manager.Socket.On(SocketIOEventTypes.Connect, OnConnected);
 		manager.Socket.On<string>("setTable", OnSetTable);
 		manager.Socket.On<string>("setDrawPile", OnSetDrawPile);
+		manager.Socket.On<string>("resumeGame", OnResumeGame);
 		manager.Socket.On<string, int[]>("initDeck", OnInitDeck);
 		manager.Socket.On<string, int[]>("addCards", OnAddCards);
 		manager.Socket.On<string, int[]>("moveCards", OnMoveCards);
@@ -292,6 +301,22 @@ public class GameManager : MonoBehaviour
 	void OnSetTable(string tableId)
 	{
 		RemoveAllCards();
+	}
+
+	void OnResumeGame(string name)
+	{
+		foreach (var game in games)
+		{
+			if (game.root.name == name)
+			{
+				var t = game.totem.transform;
+				if (t.parent != game.root)
+				{
+					ChooseTotem(game, t);
+				}
+				break;
+			}
+		}
 	}
 
 	void OnSetDrawPile(string name)
@@ -347,6 +372,38 @@ public class GameManager : MonoBehaviour
 					AddToDeck(deck, card.gameObject);
 				}
 			}
+		}
+	}
+
+	void ChooseTotem(GameEntry game, Transform t)
+	{
+		game.origin = t.localPosition;
+		game.orientation = t.localRotation;
+		t.SetParent(game.root, false);
+		t.localPosition = Vector3.zero;
+		t.localRotation = Quaternion.identity;
+	}
+
+	void RemoveTotem(GameEntry game, Transform t)
+	{
+		t.SetParent(transform.parent, false);
+		t.localPosition = game.origin;
+		t.localRotation = game.orientation;
+	}
+
+	void ToggleGame(GameEntry game)
+	{
+		var t = game.totem.transform;
+		if (t.parent == game.root)
+		{
+			RemoveTotem(game, t);
+			manager.Socket.Emit("quitGame", game.root.name);
+		}
+		else
+		{
+			OnMsg("Play " + game.root.name + " Online");
+			ChooseTotem(game, t);
+			manager.Socket.Emit("playGame", game.root.name);
 		}
 	}
 
@@ -410,13 +467,14 @@ public class GameManager : MonoBehaviour
 			return;
 		}
 
-		// Handle clicking on statue
-		if (hit.collider.gameObject == statue)
+		// Handle clicking on totems
+		foreach (var game in games)
 		{
-			OnMsg("Play War Online");
-			hit.collider.enabled = false;
-			manager.Socket.Emit("playOnline", "War");
-			return;
+			if (hit.collider.gameObject == game.totem)
+			{
+				ToggleGame(game);
+				return;
+			}
 		}
 
 		var card = hit.collider.GetComponentInParent<Card>();
