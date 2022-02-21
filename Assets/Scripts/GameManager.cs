@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.UI;
 using TMPro;
 using BestHTTP;
 using BestHTTP.SocketIO3;
@@ -59,6 +60,7 @@ public class GameEntry
 
 public class GameManager : MonoBehaviour
 {
+	public Image avatar;
 	public TMP_Text console;
 	public TMP_InputField input;
 	string userName;
@@ -246,6 +248,7 @@ public class GameManager : MonoBehaviour
 	public void SetHostAddress(string address)
 	{
 		Debug.Log("Connecting to " + address);
+		serverUrl = address;
 
 		SocketOptions options = new SocketOptions();
 		options.AutoConnect = false;
@@ -275,10 +278,23 @@ public class GameManager : MonoBehaviour
 	#endif
 	}
 
+	void OnAvatarDownloaded(HTTPRequest req, HTTPResponse resp)
+	{
+		if (req.State == HTTPRequestStates.Finished && resp.IsSuccess)
+		{
+			avatar.material.mainTexture = resp.DataAsTexture2D;
+			avatar.gameObject.SetActive(true);
+		}
+	}
+
 	public void SetWalletAddress(string address)
 	{
 		OnMsg("Connected wallet: " + address);
 		manager.Socket.Emit("setWallet", address);
+
+		var avatarUrl = serverUrl + "/avatar/" + address;
+		var request = new HTTPRequest(new Uri(avatarUrl), OnAvatarDownloaded);
+		request.Send();
 	}
 
 	void RemoveAllCards()
