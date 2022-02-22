@@ -1900,6 +1900,12 @@ MonoBehaviour:
   console: {fileID: 2100555231}
   input: {fileID: 1393601088}
   cardPrefab: {fileID: 6699180825294588007, guid: 0d94a1f1589e53a4fa163c5c53bac1e9, type: 3}
+  avatarPrefab: {fileID: 5380830847187202822, guid: fb74ea5bb86260445b44fe479561c833, type: 3}
+  spots:
+  - {fileID: 621891374}
+  - {fileID: 959069400}
+  - {fileID: 164319029}
+  - {fileID: 994144554}
   games:
   - root: {fileID: 992088342}
     totem: {fileID: 1728883972}

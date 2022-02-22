@@ -68,7 +68,10 @@ public class GameManager : MonoBehaviour
 	Camera src;
 
 	public GameObject cardPrefab;
+	public GameObject avatarPrefab;
+	List<GameObject> avatarInstances = new List<GameObject>();
 
+	public List<Transform> spots;
 	public List<GameEntry> games;
 	public List<DeckEntry> decks;
 	DeckEntry playerDeck;
@@ -255,7 +258,7 @@ public class GameManager : MonoBehaviour
 
 		manager = new SocketManager(new Uri(address), options);
 		manager.Socket.On(SocketIOEventTypes.Connect, OnConnected);
-		manager.Socket.On<string>("setTable", OnSetTable);
+		manager.Socket.On<string, int>("setTable", OnSetTable);
 		manager.Socket.On<string>("setDrawPile", OnSetDrawPile);
 		manager.Socket.On<string>("resumeGame", OnResumeGame);
 		manager.Socket.On<string, int[]>("initDeck", OnInitDeck);
@@ -314,9 +317,31 @@ public class GameManager : MonoBehaviour
 		cards.Clear();
 	}
 
-	void OnSetTable(string tableId)
+	void OnSetTable(string tableId, int count)
 	{
 		RemoveAllCards();
+
+		foreach (var avatar in avatarInstances)
+		{
+			Destroy(avatar);
+		}
+		avatarInstances.Clear();
+
+		for (int i = 0; i < Math.Min(count, spots.Count); i++)
+		{
+			var spot = spots[i];
+			var avatarUrl = serverUrl + "/avatar/" + tableId + ":" + i;
+			new HTTPRequest(new Uri(avatarUrl), (HTTPRequest req, HTTPResponse resp) =>
+			{
+				if (req.State == HTTPRequestStates.Finished && resp.IsSuccess)
+				{
+					var avatar = Instantiate(avatarPrefab, spot);
+					var renderer = avatar.GetComponent<Renderer>();
+					renderer.material.mainTexture = resp.DataAsTexture2D;
+					avatarInstances.Add(avatar);
+				}
+			}).Send();
+		}
 	}
 
 	void OnResumeGame(string name)
