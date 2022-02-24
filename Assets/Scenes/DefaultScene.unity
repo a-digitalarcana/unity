@@ -696,7 +696,7 @@ GameObject:
   m_Component:
   - component: {fileID: 859323912}
   m_Layer: 0
-  m_Name: HandRoot
+  m_Name: Hand
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1940,6 +1940,8 @@ MonoBehaviour:
     playerSpot: {fileID: 0}
     mode: 1
     cards: []
+  deckRoot: {fileID: 635802587}
+  table: {fileID: 1078811158}
   purchase: {fileID: 971905298}
   pack: {fileID: 1061194685}
   purchaseColor: {r: 0.085751146, g: 0.4433962, b: 0.17446935, a: 0}

@@ -75,8 +75,10 @@ public class GameManager : MonoBehaviour
 	public List<GameEntry> games;
 	public List<DeckEntry> decks;
 	DeckEntry playerDeck;
-	Transform handTransform;
+	Transform handRoot;
 
+	public Transform deckRoot;
+	public GameObject table;
 	public GameObject purchase, pack;
 	public Color purchaseColor, pendingColor;
 
@@ -141,7 +143,7 @@ public class GameManager : MonoBehaviour
 	private void Awake()
 	{
 		src = GetComponent<Camera>();
-		handTransform = GetDeck("HandRoot").root;
+		handRoot = GetDeck("Hand").root;
 	}
 
 	private void Start()
@@ -176,6 +178,31 @@ public class GameManager : MonoBehaviour
 	{
 		var name = key.Split(':').Last();
 		var deck = GetDeck(name);
+		if (deck != null)
+		{
+			return deck;
+		}
+
+		// Create new deck at specified location.
+		if (name.StartsWith("{") && name.EndsWith("}"))
+		{
+			var coords = name.Substring(1, name.Length - 2).Split(',');
+			if (coords.Length == 2)
+			{
+				var x = float.Parse(coords[0]);
+				var z = float.Parse(coords[1]);
+				var root = new GameObject(name);
+				var t = root.transform;
+				t.parent = deckRoot;
+				t.localPosition = new Vector3(x, 0, z);
+				t.localEulerAngles = new Vector3(-90, 90, 0); //!!
+
+				deck = new DeckEntry();
+				deck.root = t;
+				decks.Add(deck);
+			}
+		}
+
 		if (deck == null)
 		{
 			Debug.LogError("Unknown deck: " + name);
@@ -321,6 +348,8 @@ public class GameManager : MonoBehaviour
 	{
 		RemoveAllCards();
 
+		// TODO: Destroy dynamic decks.
+
 		foreach (var avatar in avatarInstances)
 		{
 			Destroy(avatar);
@@ -448,6 +477,23 @@ public class GameManager : MonoBehaviour
 		}
 	}
 
+	void OnClickTable(float x, float z)
+	{
+		var selected = new List<int>();
+		var hand = GetDeck("Hand");
+		if (hand != null)
+		{
+			foreach (var card in hand.cards)
+			{
+				if (card.transform.localPosition.y > 0.0f)
+				{
+					selected.Add(card.GetComponent<Card>().id);
+				}
+			}
+		}
+		manager.Socket.Emit("clickTable", x, z, selected.ToArray());
+	}
+
 	float beginPurchaseTime = 0.0f;
 	float pendingOpenTime = 0.0f;
 
@@ -518,6 +564,15 @@ public class GameManager : MonoBehaviour
 			}
 		}
 
+		// Handle clicking on the table
+		if (hit.collider.gameObject == table)
+		{
+			var localPos = deckRoot.InverseTransformPoint(hit.point);
+			OnClickTable(localPos.x, localPos.z);
+			return;
+		}
+
+		// Handle clicking on a card
 		var card = hit.collider.GetComponentInParent<Card>();
 		if (!card)
 			return;
@@ -530,7 +585,7 @@ public class GameManager : MonoBehaviour
 		}
 
 		// Handle clicking on card in hand
-		if (card.transform.parent == handTransform)
+		if (card.transform.parent == handRoot)
 		{
 			var pos = card.transform.localPosition;
 			pos.y = (pos.y > 0) ? 0 : cardOffset;
