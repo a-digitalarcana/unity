@@ -577,19 +577,25 @@ public class GameManager : MonoBehaviour
 		if (!card)
 			return;
 
-		// Handle clicking on player's deck
-		if (playerDeck != null && card.transform.parent == playerDeck.root)
+		var t = card.transform;
+
+		// Handle clicking on card in hand
+		if (t.parent == handRoot)
 		{
-			manager.Socket.Emit("drawCard");
+			var pos = t.localPosition;
+			pos.y = (pos.y > 0) ? 0 : cardOffset;
+			t.localPosition = pos;
 			return;
 		}
 
-		// Handle clicking on card in hand
-		if (card.transform.parent == handRoot)
+		// Handle clicking on a deck
+		foreach (var deck in decks)
 		{
-			var pos = card.transform.localPosition;
-			pos.y = (pos.y > 0) ? 0 : cardOffset;
-			card.transform.localPosition = pos;
+			if (t.parent == deck.root)
+			{
+				manager.Socket.Emit("clickDeck", deck.root.name);
+				return;
+			}
 		}
 	}
 
