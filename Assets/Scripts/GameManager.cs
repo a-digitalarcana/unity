@@ -67,6 +67,20 @@ public class GameManager : MonoBehaviour
 
 	Camera src;
 
+	public float cameraSpeed = 1.0f;
+	public Transform cameraForward;
+	Vector3 cameraOriginPos;
+	Quaternion cameraOriginRot;
+
+	enum CameraMovement
+	{
+		None,
+		Forward,
+		Backward
+	};
+	CameraMovement cameraMovement;
+	float cameraTweenPct;
+
 	public GameObject cardPrefab;
 	public GameObject avatarPrefab;
 	List<GameObject> avatarInstances = new List<GameObject>();
@@ -144,6 +158,10 @@ public class GameManager : MonoBehaviour
 	{
 		src = GetComponent<Camera>();
 		handRoot = GetDeck("Hand").root;
+
+		var t = transform;
+		cameraOriginPos = t.localPosition;
+		cameraOriginRot = t.localRotation;
 	}
 
 	private void Start()
@@ -494,6 +512,15 @@ public class GameManager : MonoBehaviour
 		manager.Socket.Emit("clickTable", x, z, selected.ToArray());
 	}
 
+	void MoveCameraForward()
+	{
+		cameraMovement = CameraMovement.Forward;
+	}
+	void MoveCameraBackward()
+	{
+		cameraMovement = CameraMovement.Backward;
+	}
+
 	float beginPurchaseTime = 0.0f;
 	float pendingOpenTime = 0.0f;
 
@@ -505,6 +532,42 @@ public class GameManager : MonoBehaviour
 			OnMsg("Server timed out, resetting pack state.");
 			pack.GetComponent<Renderer>().material.color = purchaseColor;
 			pendingOpenTime = 0.0f;
+		}
+
+		// Handle camera movement
+		if (Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.UpArrow))
+		{
+			MoveCameraForward();
+		}
+		else if (Input.GetKeyDown(KeyCode.S) || Input.GetKeyDown(KeyCode.DownArrow))
+		{
+			MoveCameraBackward();
+		}
+
+		// TODO(aleiby): Perform raycast before moving camera.
+		if (cameraMovement != CameraMovement.None)
+		{
+			if (cameraMovement == CameraMovement.Forward)
+			{
+				cameraTweenPct += cameraSpeed * Time.deltaTime;
+				if (cameraTweenPct >= 1.0f)
+				{
+					cameraTweenPct = 1.0f;
+					cameraMovement = CameraMovement.None;
+				}
+			}
+			else if (cameraMovement == CameraMovement.Backward)
+			{
+				cameraTweenPct -= cameraSpeed * Time.deltaTime;
+				if (cameraTweenPct <= 0.0f)
+				{
+					cameraTweenPct = 0.0f;
+					cameraMovement = CameraMovement.None;
+				}
+			}
+
+			transform.localPosition = Vector3.Lerp(cameraOriginPos, cameraForward.localPosition, cameraTweenPct);
+			transform.localRotation = Quaternion.Lerp(cameraOriginRot, cameraForward.localRotation, cameraTweenPct);
 		}
 
 		if (!Input.GetMouseButtonDown(0))
