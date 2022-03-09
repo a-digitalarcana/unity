@@ -44,7 +44,7 @@ public enum DeckMode
 [Serializable]
 public class DeckEntry
 {
-	public Transform root, playerSpot;
+	public Transform root;
 	public DeckMode mode;
 	public List<GameObject> cards = new List<GameObject>();
 }
@@ -303,8 +303,7 @@ public class GameManager : MonoBehaviour
 
 		manager = new SocketManager(new Uri(address), options);
 		manager.Socket.On(SocketIOEventTypes.Connect, OnConnected);
-		manager.Socket.On<string, int>("setTable", OnSetTable);
-		manager.Socket.On<string>("setDrawPile", OnSetDrawPile);
+		manager.Socket.On<string, string, int>("setTable", OnSetTable);
 		manager.Socket.On<string>("resumeGame", OnResumeGame);
 		manager.Socket.On<string, int[]>("initDeck", OnInitDeck);
 		manager.Socket.On<string, int[]>("addCards", OnAddCards);
@@ -362,7 +361,7 @@ public class GameManager : MonoBehaviour
 		cards.Clear();
 	}
 
-	void OnSetTable(string tableId, int count)
+	void OnSetTable(string tableId, string seat, int count)
 	{
 		RemoveAllCards();
 
@@ -373,6 +372,8 @@ public class GameManager : MonoBehaviour
 			Destroy(avatar);
 		}
 		avatarInstances.Clear();
+
+		var playerSeat = String.Format("Player{0}_spot", seat);
 
 		for (int i = 0; i < Math.Min(count, spots.Count); i++)
 		{
@@ -388,6 +389,12 @@ public class GameManager : MonoBehaviour
 					avatarInstances.Add(avatar);
 				}
 			}).Send();
+
+			if (spot.name == playerSeat)
+			{
+				var root = transform.parent;
+				root.SetParent(spot, false);
+			}
 		}
 	}
 
@@ -404,24 +411,6 @@ public class GameManager : MonoBehaviour
 				}
 				break;
 			}
-		}
-	}
-
-	void OnSetDrawPile(string name)
-	{
-		playerDeck = GetDeck(name);
-		if (playerDeck == null)
-		{
-			Debug.LogError("Cound not find draw pile: " + name);
-			return;
-		}
-
-		Debug.Log("Draw pile: " + name);
-
-		if (playerDeck.playerSpot != null)
-		{
-			var root = transform.parent;
-			root.SetParent(playerDeck.playerSpot, false);
 		}
 	}
 
