@@ -484,7 +484,7 @@ public class GameManager : MonoBehaviour
 		}
 	}
 
-	void OnClickTable(float x, float z)
+	int[] GetSelected(string deck = "Hand")
 	{
 		var selected = new List<int>();
 		var hand = GetDeck("Hand");
@@ -498,7 +498,12 @@ public class GameManager : MonoBehaviour
 				}
 			}
 		}
-		manager.Socket.Emit("clickTable", x, z, selected.ToArray());
+		return selected.ToArray();
+	}
+
+	void OnClickTable(float x, float z)
+	{
+		manager.Socket.Emit("clickTable", x, z, GetSelected());
 	}
 
 	void MoveCameraForward()
@@ -645,7 +650,7 @@ public class GameManager : MonoBehaviour
 		{
 			if (t.parent == deck.root)
 			{
-				manager.Socket.Emit("clickDeck", deck.root.name);
+				manager.Socket.Emit("clickDeck", deck.root.name, GetSelected());
 				return;
 			}
 		}
