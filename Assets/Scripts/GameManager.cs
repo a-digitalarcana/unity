@@ -61,9 +61,11 @@ public class GameEntry
 public class GameManager : MonoBehaviour
 {
 	public Image avatar;
+	public TMP_Text playerName;
 	public TMP_Text console;
 	public TMP_InputField input;
 	string userName;
+	string tableId;
 
 	Camera src;
 
@@ -88,7 +90,6 @@ public class GameManager : MonoBehaviour
 	public List<Transform> spots;
 	public List<GameEntry> games;
 	public List<DeckEntry> decks;
-	DeckEntry playerDeck;
 	Transform handRoot;
 
 	public Transform deckRoot;
@@ -304,6 +305,7 @@ public class GameManager : MonoBehaviour
 		manager = new SocketManager(new Uri(address), options);
 		manager.Socket.On(SocketIOEventTypes.Connect, OnConnected);
 		manager.Socket.On<string, string, int>("setTable", OnSetTable);
+		manager.Socket.On<int>("nameChanged", OnNameChanged);
 		manager.Socket.On<string>("resumeGame", OnResumeGame);
 		manager.Socket.On<string, int[]>("initDeck", OnInitDeck);
 		manager.Socket.On<string, int[]>("addCards", OnAddCards);
@@ -339,6 +341,16 @@ public class GameManager : MonoBehaviour
 		OnMsg("Connected wallet: " + address);
 		manager.Socket.Emit("setWallet", address);
 
+		// TODO: Remove userName?
+		var nameUrl = serverUrl + "/name/" + address;
+		new HTTPRequest(new Uri(nameUrl), (HTTPRequest req, HTTPResponse resp) =>
+		{
+			if (req.State == HTTPRequestStates.Finished && resp.IsSuccess)
+			{
+				playerName.text = resp.DataAsText;
+			}
+		}).Send();
+
 		var avatarUrl = serverUrl + "/avatar/" + address;
 		var request = new HTTPRequest(new Uri(avatarUrl), OnAvatarDownloaded);
 		request.Send();
@@ -363,6 +375,8 @@ public class GameManager : MonoBehaviour
 
 	void OnSetTable(string tableId, string seat, int count)
 	{
+		this.tableId = tableId;
+
 		RemoveAllCards();
 
 		// TODO: Destroy dynamic decks.
@@ -373,12 +387,20 @@ public class GameManager : MonoBehaviour
 		}
 		avatarInstances.Clear();
 
-		var playerSeat = String.Format("Player{0}_spot", seat);
+		var playerSeat = string.Format("Player{0}_spot", seat);
 
-		for (int i = 0; i < Math.Min(count, spots.Count); i++)
+		for (int slot = 0; slot < Math.Min(count, spots.Count); slot++)
 		{
-			var spot = spots[i];
-			var avatarUrl = serverUrl + "/avatar/" + tableId + ":" + i;
+			var spot = spots[slot];
+			if (spot.name == playerSeat)
+			{
+				var root = transform.parent;
+				root.SetParent(spot, false);
+				continue;
+			}
+
+			var tableSlot = tableId + ":" + slot;
+			var avatarUrl = serverUrl + "/avatar/" + tableSlot;
 			new HTTPRequest(new Uri(avatarUrl), (HTTPRequest req, HTTPResponse resp) =>
 			{
 				if (req.State == HTTPRequestStates.Finished && resp.IsSuccess)
@@ -387,15 +409,36 @@ public class GameManager : MonoBehaviour
 					var renderer = avatar.GetComponent<Renderer>();
 					renderer.material.mainTexture = resp.DataAsTexture2D;
 					avatarInstances.Add(avatar);
+
+					var nameUrl = serverUrl + "/name/" + tableSlot;
+					new HTTPRequest(new Uri(nameUrl), (HTTPRequest req, HTTPResponse resp) =>
+					{
+						if (req.State == HTTPRequestStates.Finished && resp.IsSuccess)
+						{
+							var name = avatar.GetComponentInChildren<TMP_Text>();
+							name.text = resp.DataAsText;
+						}
+					}).Send();
 				}
 			}).Send();
-
-			if (spot.name == playerSeat)
-			{
-				var root = transform.parent;
-				root.SetParent(spot, false);
-			}
 		}
+	}
+
+	void OnNameChanged(int slot)
+	{
+		// TODO: Cancel existing pending request.
+		var tableSlot = tableId + ":" + slot;
+		var nameUrl = serverUrl + "/name/" + tableSlot;
+		new HTTPRequest(new Uri(nameUrl), (HTTPRequest req, HTTPResponse resp) =>
+		{
+			if (req.State == HTTPRequestStates.Finished && resp.IsSuccess)
+			{
+				var spot = spots[slot];
+				var name = (transform.parent.parent == spot) ? playerName :
+					spot.GetComponentInChildren<TMP_Text>();
+				name.text = resp.DataAsText;
+			}
+		}).Send();
 	}
 
 	void OnResumeGame(string name)
