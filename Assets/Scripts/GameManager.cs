@@ -21,6 +21,7 @@ public class CardMapping
 	public int value;
 	public int token_id;
 	public string ipfsUri;
+	public int facing;
 }
 
 [Serializable]
@@ -544,11 +545,6 @@ public class GameManager : MonoBehaviour
 		return selected.ToArray();
 	}
 
-	void OnClickTable(float x, float z)
-	{
-		manager.Socket.Emit("clickTable", x, z, GetSelected());
-	}
-
 	void MoveCameraForward()
 	{
 		cameraMovement = CameraMovement.Forward;
@@ -607,7 +603,9 @@ public class GameManager : MonoBehaviour
 			transform.localRotation = Quaternion.Lerp(cameraOriginRot, cameraForward.localRotation, cameraTweenPct);
 		}
 
-		if (!Input.GetMouseButtonDown(0))
+		bool bLeftClick = Input.GetMouseButtonDown(0);
+		bool bRightClick = Input.GetMouseButtonDown(1);
+		if (!(bLeftClick || bRightClick))
 			return;
 
 		var ray = src.ScreenPointToRay(Input.mousePosition);
@@ -616,51 +614,54 @@ public class GameManager : MonoBehaviour
 		if (!Physics.Raycast(ray, out hit))
 			return;
 
-		// Handle clicking on purchase tray
-		if (hit.collider.gameObject == purchase && !pack.activeSelf)
+		if (bLeftClick)
 		{
-			if (beginPurchaseTime > 0.0f && Time.realtimeSinceStartup < beginPurchaseTime + 60.0f)
+			// Handle clicking on purchase tray
+			if (hit.collider.gameObject == purchase && !pack.activeSelf)
 			{
-				Debug.Log("Throttling purchase");
+				if (beginPurchaseTime > 0.0f && Time.realtimeSinceStartup < beginPurchaseTime + 60.0f)
+				{
+					Debug.Log("Throttling purchase");
+					return;
+				}
+				beginPurchaseTime = Time.realtimeSinceStartup;
+				OnMsg("Initiating purchase...");
+			#if (UNITY_EDITOR)
+				OnBuyCardPack(1);
+			#elif (UNITY_WEBGL)
+				BuyCardPack(); // ask browser, will call OnBuyCardPack
+			#endif
 				return;
 			}
-			beginPurchaseTime = Time.realtimeSinceStartup;
-			OnMsg("Initiating purchase...");
-		#if (UNITY_EDITOR)
-			OnBuyCardPack(1);
-		#elif (UNITY_WEBGL)
-			BuyCardPack(); // ask browser, will call OnBuyCardPack
-		#endif
-			return;
-		}
 
-		// Handle clicking on unopened pack
-		if (hit.collider.gameObject == pack)
-		{
-			var material = pack.GetComponent<Renderer>().material;
-			if (material.color == pendingColor)
+			// Handle clicking on unopened pack
+			if (hit.collider.gameObject == pack)
 			{
-				Debug.Log("Throttling open");
+				var material = pack.GetComponent<Renderer>().material;
+				if (material.color == pendingColor)
+				{
+					Debug.Log("Throttling open");
+					return;
+				}
+				pendingOpenTime = Time.realtimeSinceStartup;
+				pack.GetComponent<Renderer>().material.color = pendingColor;
+				OnMsg("Opening pack...");
+			#if (UNITY_EDITOR)
+				OnOpenCardPack(1);
+			#elif (UNITY_WEBGL)
+				OpenCardPack(); // ask browser, will call OnOpenCardPack
+			#endif
 				return;
 			}
-			pendingOpenTime = Time.realtimeSinceStartup;
-			pack.GetComponent<Renderer>().material.color = pendingColor;
-			OnMsg("Opening pack...");
-		#if (UNITY_EDITOR)
-			OnOpenCardPack(1);
-		#elif (UNITY_WEBGL)
-			OpenCardPack(); // ask browser, will call OnOpenCardPack
-		#endif
-			return;
-		}
 
-		// Handle clicking on totems
-		foreach (var game in games)
-		{
-			if (hit.collider.gameObject == game.totem)
+			// Handle clicking on totems
+			foreach (var game in games)
 			{
-				ToggleGame(game);
-				return;
+				if (hit.collider.gameObject == game.totem)
+				{
+					ToggleGame(game);
+					return;
+				}
 			}
 		}
 
@@ -668,7 +669,7 @@ public class GameManager : MonoBehaviour
 		if (hit.collider.gameObject == table)
 		{
 			var localPos = deckRoot.InverseTransformPoint(hit.point);
-			OnClickTable(localPos.x, localPos.z);
+			manager.Socket.Emit("clickTable", localPos.x, localPos.z, GetSelected(), bRightClick);
 			return;
 		}
 
@@ -680,7 +681,7 @@ public class GameManager : MonoBehaviour
 		var t = card.transform;
 
 		// Handle clicking on card in hand
-		if (t.parent == handRoot)
+		if (bLeftClick && t.parent == handRoot)
 		{
 			var pos = t.localPosition;
 			pos.y = (pos.y > 0) ? 0 : cardOffset;
@@ -693,7 +694,7 @@ public class GameManager : MonoBehaviour
 		{
 			if (t.parent == deck.root)
 			{
-				manager.Socket.Emit("clickDeck", deck.root.name, GetSelected());
+				manager.Socket.Emit("clickDeck", deck.root.name, GetSelected(), bRightClick);
 				return;
 			}
 		}
