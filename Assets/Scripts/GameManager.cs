@@ -232,6 +232,12 @@ public class GameManager : MonoBehaviour
 
 	void AddToDeck(DeckEntry entry, int[] ids)
 	{
+		// Add to stack in reverse order so first card is on top.
+		if (entry.mode == DeckMode.Stacked)
+		{
+			Array.Reverse(ids);
+		}
+
 		foreach (var id in ids)
 		{
 			// TODO: Verify not already in deck. (Not currently in any deck?)
@@ -244,8 +250,11 @@ public class GameManager : MonoBehaviour
 			{
 				var mapping = mappings[id];
 				card.token_id = mapping.token_id;
+				card.facing = mapping.facing;
 				card.value = (Tarot.AllCards)mapping.value;
 				card.revealed = true;
+
+				SetFlipped(entry, cardObject, card.isFlipped);
 
 				// Use loaner deck texture as fallback until downloaded.
 				card.front.material.mainTexture = loaner.textures[mapping.value];
@@ -484,6 +493,12 @@ public class GameManager : MonoBehaviour
 		var deck = GetDeckFromKey(key);
 		if (deck != null)
 		{
+			// Add to stack in reverse order so first card is on top.
+			if (deck.mode == DeckMode.Stacked)
+			{
+				Array.Reverse(cards);
+			}
+
 			foreach (var id in cards)
 			{
 				var card = TakeCard(id);
@@ -760,6 +775,14 @@ public class GameManager : MonoBehaviour
 		deck.cards.Add(card);
 	}
 
+	void SetFlipped(DeckEntry deck, GameObject card, bool flipped)
+	{
+		var t = card.transform;
+		var ea = t.localEulerAngles;
+		ea.y = flipped ? 180 : 0;
+		t.localEulerAngles = ea;
+	}
+
 	GameObject NewCard(DeckEntry deck)
 	{
 		var newCard = Instantiate(cardPrefab, deck.root);
@@ -806,27 +829,36 @@ public class GameManager : MonoBehaviour
 				foreach (var cardObj in deck.cards)
 				{
 					var card = cardObj.GetComponent<Card>();
-					if (card.id == mapping.id && !card.revealed)
+					if (card.id != mapping.id)
+						continue;
+
+					if (card.facing != mapping.facing)
 					{
-						card.revealed = true;
-						card.value = (Tarot.AllCards)mapping.value;
-						card.token_id = mapping.token_id;
+						card.facing = mapping.facing;
+						SetFlipped(deck, cardObj, card.isFlipped);
+					}
 
-						// Use loaner deck texture as fallback until downloaded.
-						card.front.material.mainTexture = loaner.textures[mapping.value];
+					if (card.revealed)
+						continue;
 
-						CardMetadata metadata;
-						if (tokenMetadata.TryGetValue(mapping.token_id, out metadata))
+					card.revealed = true;
+					card.value = (Tarot.AllCards)mapping.value;
+					card.token_id = mapping.token_id;
+
+					// Use loaner deck texture as fallback until downloaded.
+					card.front.material.mainTexture = loaner.textures[mapping.value];
+
+					CardMetadata metadata;
+					if (tokenMetadata.TryGetValue(mapping.token_id, out metadata))
+					{
+						if (textureDownloaded.ContainsKey(metadata.displayUri))
 						{
-							if (textureDownloaded.ContainsKey(metadata.displayUri))
-							{
-								var priority = Card.GetLotPriority(metadata.lot);
-								Davinci.get()
-									.load(metadata.displayUri)
-									.withColor(Card.lotColors[priority])
-									.into(card.front)
-									.start();
-							}
+							var priority = Card.GetLotPriority(metadata.lot);
+							Davinci.get()
+								.load(metadata.displayUri)
+								.withColor(Card.lotColors[priority])
+								.into(card.front)
+								.start();
 						}
 					}
 				}
