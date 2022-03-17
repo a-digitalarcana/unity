@@ -15,13 +15,27 @@ using ParrelSync;
 #endif
 
 [Serializable]
+public class CardState
+{
+	public int id;
+	public int facing;
+
+	public CardState() { }
+
+	public CardState(int id, int facing = 0)
+	{
+		this.id = id;
+		this.facing = facing;
+	}
+}
+
+[Serializable]
 public class CardMapping
 {
 	public int id;
 	public int value;
 	public int token_id;
 	public string ipfsUri;
-	public int facing;
 }
 
 [Serializable]
@@ -230,31 +244,31 @@ public class GameManager : MonoBehaviour
 		return deck;
 	}
 
-	void AddToDeck(DeckEntry entry, int[] ids)
+	void AddToDeck(DeckEntry entry, CardState[] cards)
 	{
 		// Add to stack in reverse order so first card is on top.
 		if (entry.mode == DeckMode.Stacked)
 		{
-			Array.Reverse(ids);
+			Array.Reverse(cards);
 		}
 
-		foreach (var id in ids)
+		foreach (var state in cards)
 		{
 			// TODO: Verify not already in deck. (Not currently in any deck?)
 			var cardObject = NewCard(entry);
 			var card = cardObject.GetComponent<Card>();
-			card.id = id;
+			card.id = state.id;
+			card.facing = state.facing;
+
+			SetFlipped(entry, cardObject, card.isFlipped);
 
 			// look up mapping
-			if (mappings.ContainsKey(id))
+			if (mappings.ContainsKey(state.id))
 			{
-				var mapping = mappings[id];
+				var mapping = mappings[state.id];
 				card.token_id = mapping.token_id;
-				card.facing = mapping.facing;
 				card.value = (Tarot.AllCards)mapping.value;
 				card.revealed = true;
-
-				SetFlipped(entry, cardObject, card.isFlipped);
 
 				// Use loaner deck texture as fallback until downloaded.
 				card.front.material.mainTexture = loaner.textures[mapping.value];
@@ -294,6 +308,8 @@ public class GameManager : MonoBehaviour
 				var card = cardObject.GetComponent<Card>();
 				if (card.id == id)
 				{
+					card.facing = 0;
+					SetFlipped(deck, cardObject, card.isFlipped);
 					deck.cards.Remove(cardObject);
 					return card;
 				}
@@ -317,9 +333,10 @@ public class GameManager : MonoBehaviour
 		manager.Socket.On<string, string, int>("setTable", OnSetTable);
 		manager.Socket.On<int>("nameChanged", OnNameChanged);
 		manager.Socket.On<string>("resumeGame", OnResumeGame);
-		manager.Socket.On<string, int[]>("initDeck", OnInitDeck);
+		manager.Socket.On<string, CardState[]>("initDeck", OnInitDeck);
 		manager.Socket.On<string, int[]>("addCards", OnAddCards);
 		manager.Socket.On<string, int[]>("moveCards", OnMoveCards);
+		manager.Socket.On<string, CardState[]>("facing", OnFacing);
 		manager.Socket.On<CardMapping[]>("revealCards", OnRevealCards);
 		manager.Socket.On<string>("msg", OnMsg);
 		manager.Socket.On<string>("userName", OnUserName);
@@ -467,7 +484,7 @@ public class GameManager : MonoBehaviour
 		}
 	}
 
-	void OnInitDeck(string key, int[] cards)
+	void OnInitDeck(string key, CardState[] cards)
 	{
 		Debug.Log("InitDeck: " + key);
 
@@ -484,7 +501,7 @@ public class GameManager : MonoBehaviour
 		var deck = GetDeckFromKey(key);
 		if (deck != null)
 		{
-			AddToDeck(deck, cards);
+			AddToDeck(deck, cards.Select(id => new CardState(id)).ToArray());
 		}
 	}
 
@@ -506,6 +523,26 @@ public class GameManager : MonoBehaviour
 				{
 					card.transform.SetParent(deck.root, false);
 					AddToDeck(deck, card.gameObject);
+				}
+			}
+		}
+	}
+
+	void OnFacing(string key, CardState[] cards)
+	{
+		var deck = GetDeckFromKey(key);
+		if (deck != null)
+		{
+			foreach (var state in cards)
+			{
+				foreach (var cardObject in deck.cards)
+				{
+					var card = cardObject.GetComponent<Card>();
+					if (card.id == state.id)
+					{
+						card.facing = state.facing;
+						SetFlipped(deck, cardObject, card.isFlipped);
+					}
 				}
 			}
 		}
@@ -831,12 +868,6 @@ public class GameManager : MonoBehaviour
 					var card = cardObj.GetComponent<Card>();
 					if (card.id != mapping.id)
 						continue;
-
-					if (card.facing != mapping.facing)
-					{
-						card.facing = mapping.facing;
-						SetFlipped(deck, cardObj, card.isFlipped);
-					}
 
 					if (card.revealed)
 						continue;
