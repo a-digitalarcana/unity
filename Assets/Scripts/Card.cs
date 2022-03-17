@@ -6,7 +6,10 @@ public class Card : MonoBehaviour
 	public bool revealed = false;
 	public Tarot.AllCards value;
 	public int token_id; // -1 if loaner
+	public int facing; // even=default, odd=flipped
 	public Renderer front, back;
+
+	public bool isFlipped { get { return facing % 2 != 0; } }
 
 	public static Color[] lotColors = new Color[]
 	{
