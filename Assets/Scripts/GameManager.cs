@@ -244,10 +244,9 @@ public class GameManager : MonoBehaviour
 		return deck;
 	}
 
-	void AddToDeck(DeckEntry entry, CardState[] cards)
+	void AddToDeck(DeckEntry entry, CardState[] cards, bool toStart = false)
 	{
-		// Add to stack in reverse order so first card is on top.
-		if (entry.mode == DeckMode.Stacked)
+		if (toStart)
 		{
 			Array.Reverse(cards);
 		}
@@ -255,7 +254,7 @@ public class GameManager : MonoBehaviour
 		foreach (var state in cards)
 		{
 			// TODO: Verify not already in deck. (Not currently in any deck?)
-			var cardObject = NewCard(entry);
+			var cardObject = NewCard(entry, toStart);
 			var card = cardObject.GetComponent<Card>();
 			card.id = state.id;
 			card.facing = state.facing;
@@ -334,8 +333,8 @@ public class GameManager : MonoBehaviour
 		manager.Socket.On<int>("nameChanged", OnNameChanged);
 		manager.Socket.On<string>("resumeGame", OnResumeGame);
 		manager.Socket.On<string, CardState[]>("initDeck", OnInitDeck);
-		manager.Socket.On<string, int[]>("addCards", OnAddCards);
-		manager.Socket.On<string, int[]>("moveCards", OnMoveCards);
+		manager.Socket.On<string, int[], bool>("addCards", OnAddCards);
+		manager.Socket.On<string, int[], bool>("moveCards", OnMoveCards);
 		manager.Socket.On<string, CardState[]>("facing", OnFacing);
 		manager.Socket.On<CardMapping[]>("revealCards", OnRevealCards);
 		manager.Socket.On<string>("msg", OnMsg);
@@ -496,22 +495,21 @@ public class GameManager : MonoBehaviour
 		}
 	}
 
-	void OnAddCards(string key, int[] cards)
+	void OnAddCards(string key, int[] cards, bool toStart)
 	{
 		var deck = GetDeckFromKey(key);
 		if (deck != null)
 		{
-			AddToDeck(deck, cards.Select(id => new CardState(id)).ToArray());
+			AddToDeck(deck, cards.Select(id => new CardState(id)).ToArray(), toStart);
 		}
 	}
 
-	void OnMoveCards(string key, int[] cards)
+	void OnMoveCards(string key, int[] cards, bool toStart)
 	{
 		var deck = GetDeckFromKey(key);
 		if (deck != null)
 		{
-			// Add to stack in reverse order so first card is on top.
-			if (deck.mode == DeckMode.Stacked)
+			if (toStart)
 			{
 				Array.Reverse(cards);
 			}
@@ -522,7 +520,7 @@ public class GameManager : MonoBehaviour
 				if (card)
 				{
 					card.transform.SetParent(deck.root, false);
-					AddToDeck(deck, card.gameObject);
+					AddToDeck(deck, card.gameObject, toStart);
 				}
 			}
 		}
@@ -783,33 +781,61 @@ public class GameManager : MonoBehaviour
 		console.text += '\n' + msg;
 	}
 
-	public void Collapse(List<GameObject> cards)
+	void PositionCard(DeckMode mode, Transform t, int index, int total)
 	{
-		float x = 0;
-		foreach (var card in cards)
+		switch (mode)
 		{
-			var pos = card.transform.localPosition;
-			pos.x = x;
-			card.transform.localPosition = pos;
-			x += cardOffset;
+			case DeckMode.Stacked: // top to bottom
+				t.localPosition = new Vector3(0, 0, (total - 1 - index) * stackOffset);
+				break;
+			case DeckMode.LinearFanRight: // left to right
+				t.localPosition = new Vector3(index * cardOffset, 0, 0);
+				break;
+			case DeckMode.LinearFanLeft: // right to left
+				t.localPosition = new Vector3(index * -cardOffset, 0, 0);
+				break;
 		}
 	}
 
-	void AddToDeck(DeckEntry deck, GameObject card)
+	void PositionCards(DeckEntry deck)
 	{
-		switch (deck.mode)
+		int i = 0;
+		int count = deck.cards.Count;
+		foreach (var card in deck.cards)
 		{
-			case DeckMode.Stacked:
-				card.transform.localPosition = new Vector3(0, 0, deck.cards.Count * stackOffset);
-				break;
-			case DeckMode.LinearFanRight:
-				card.transform.localPosition = new Vector3(deck.cards.Count * cardOffset, 0, 0);
-				break;
-			case DeckMode.LinearFanLeft:
-				card.transform.localPosition = new Vector3(deck.cards.Count * -cardOffset, 0, 0);
-				break;
+			PositionCard(deck.mode, card.transform, i++, count);
 		}
-		deck.cards.Add(card);
+	}
+
+	void AddToDeck(DeckEntry deck, GameObject card, bool toStart = false)
+	{
+		if (toStart)
+		{
+			deck.cards.Insert(0, card);
+
+			if (deck.mode == DeckMode.Stacked && deck.root != handRoot)
+			{
+				PositionCard(deck.mode, card.transform, 0, deck.cards.Count);
+			}
+			else
+			{
+				PositionCards(deck);
+			}
+		}
+		else
+		{
+			if (deck.mode == DeckMode.Stacked || deck.root == handRoot)
+			{
+				deck.cards.Add(card);
+				PositionCards(deck);
+			}
+			else
+			{
+				int i = deck.cards.Count;
+				deck.cards.Add(card);
+				PositionCard(deck.mode, card.transform, i, i + 1);
+			}
+		}
 	}
 
 	void SetFlipped(DeckEntry deck, GameObject card, bool flipped)
@@ -820,10 +846,10 @@ public class GameManager : MonoBehaviour
 		t.localEulerAngles = ea;
 	}
 
-	GameObject NewCard(DeckEntry deck)
+	GameObject NewCard(DeckEntry deck, bool toStart)
 	{
 		var newCard = Instantiate(cardPrefab, deck.root);
-		AddToDeck(deck, newCard);
+		AddToDeck(deck, newCard, toStart);
 		return newCard;
 	}
 
