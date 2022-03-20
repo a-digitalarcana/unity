@@ -106,6 +106,7 @@ public class GameManager : MonoBehaviour
 	public List<GameEntry> games;
 	public List<DeckEntry> decks;
 	Transform handRoot;
+	GameEntry activeGame;
 
 	public Transform deckRoot;
 	public GameObject table;
@@ -548,6 +549,7 @@ public class GameManager : MonoBehaviour
 
 	void ChooseTotem(GameEntry game, Transform t)
 	{
+		activeGame = game;
 		game.origin = t.localPosition;
 		game.orientation = t.localRotation;
 		t.SetParent(game.root, false);
@@ -557,6 +559,7 @@ public class GameManager : MonoBehaviour
 
 	void RemoveTotem(GameEntry game, Transform t)
 	{
+		activeGame = null;
 		t.SetParent(transform.parent, false);
 		t.localPosition = game.origin;
 		t.localRotation = game.orientation;
@@ -705,12 +708,23 @@ public class GameManager : MonoBehaviour
 			}
 
 			// Handle clicking on totems
-			foreach (var game in games)
+			if (activeGame != null)
 			{
-				if (hit.collider.gameObject == game.totem)
+				if (hit.collider.gameObject == activeGame.totem)
 				{
-					ToggleGame(game);
+					ToggleGame(activeGame);
 					return;
+				}
+			}
+			else
+			{
+				foreach (var game in games)
+				{
+					if (hit.collider.gameObject == game.totem)
+					{
+						ToggleGame(game);
+						return;
+					}
 				}
 			}
 		}
