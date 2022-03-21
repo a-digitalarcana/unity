@@ -230,7 +230,7 @@ public class GameManager : MonoBehaviour
 				var t = root.transform;
 				t.parent = deckRoot;
 				t.localPosition = new Vector3(x, 0, z);
-				t.localEulerAngles = new Vector3(-90, 90, 0); //!!
+				t.localEulerAngles = new Vector3(-90, -90, 0); //!!
 
 				deck = new DeckEntry();
 				deck.root = t;
