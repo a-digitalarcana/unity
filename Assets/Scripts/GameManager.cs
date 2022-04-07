@@ -53,7 +53,8 @@ public enum DeckMode
 {
 	Stacked,
 	LinearFanRight,
-	LinearFanLeft // TODO: Cards should rotate opposite direction so newer cards lay on top of older
+	LinearFanLeft,
+	LinearFanDown,
 }
 
 [Serializable]
@@ -783,6 +784,7 @@ public class GameManager : MonoBehaviour
 	public void OnOpenCardPack(int success)
 	{
 		OnMsg("OnOpenCardPack: " + success);
+		pendingOpenTime = 0.0f;
 		pack.SetActive(false);
 
 		OnMsg("<Insert cool reveal here>");
@@ -797,16 +799,24 @@ public class GameManager : MonoBehaviour
 
 	void PositionCard(DeckMode mode, Transform t, int index, int total)
 	{
+		var animation = t.gameObject.GetComponent<Animation>();
 		switch (mode)
 		{
 			case DeckMode.Stacked: // top to bottom
 				t.localPosition = new Vector3(0, 0, (total - 1 - index) * stackOffset);
+				animation.Play("Stacked");
 				break;
 			case DeckMode.LinearFanRight: // left to right
 				t.localPosition = new Vector3(index * cardOffset, 0, 0);
+				animation.Play("FanRight");
 				break;
 			case DeckMode.LinearFanLeft: // right to left
 				t.localPosition = new Vector3(index * -cardOffset, 0, 0);
+				animation.Play("FanLeft");
+				break;
+			case DeckMode.LinearFanDown:
+				t.localPosition = new Vector3(0, index * -cardOffset, 0);
+				animation.Play("FanDown");
 				break;
 		}
 	}
