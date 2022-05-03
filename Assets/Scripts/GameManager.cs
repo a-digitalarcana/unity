@@ -83,6 +83,8 @@ public class GameManager : MonoBehaviour
 	string userName;
 	string tableId;
 
+	public VolumeControl volume;
+
 	Camera src;
 
 	public float cameraSpeed = 1.0f;
@@ -727,6 +729,13 @@ public class GameManager : MonoBehaviour
 						return;
 					}
 				}
+			}
+
+			// Handle clicking on volume control
+			if (hit.collider.gameObject == volume.gameObject)
+			{
+				volume.OnClick(GetComponent<Camera>());
+				return;
 			}
 		}
 
